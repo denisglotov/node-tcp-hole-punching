@@ -1,0 +1,14 @@
+// Use Airbnb JavaScript style. To load eslint, run `npm i`.
+{
+  "extends": "airbnb",
+
+  rules: {
+    // Ignore using console because I want to keep the example minimalistic
+    // and not use external libraries, like log4js.
+    "no-console": ["off"],
+
+    // The original code uses functions before their definitions. Just warn
+    // about it.
+    "no-use-before-define": ["warn"],
+  }
+}
