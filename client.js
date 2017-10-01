@@ -1,120 +1,123 @@
-// based on http://www.bford.info/pub/net/p2pnat/index.html
-
 const readline = require('readline');
 const net = require('net');
 
+const RETRY_PERIOD = 2000; // 2 sec
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
 
-const addressOfS = 'x.x.x.x'; // replace this with the IP of the server running publicserver.js
-const portOfS = 9999;
-
 let socketToS;
 let tunnelEstablished = false;
+let tunnelSocket = null;
 
+// Parse the parameters.
+if (process.argv.length < 4) {
+  console.log(
+    `Too few arguments. Use: node ${process.argv[1]} public-server-host port [my-name].`);
+  process.exit(-1);
+}
+const addressOfS = process.argv[2];
+const portOfS = parseInt(process.argv[3], 10);
+const user = process.argv[4] || process.env.USER;
+
+// Connect to the public server to get the other part address-port.
 function connectToS() {
-  console.log('> (A->S) connecting to S');
+  console.log(`(${user}->S) connecting to S...`);
 
   socketToS = net.createConnection({ host: addressOfS, port: portOfS }, () => {
-    console.log('> (A->S) connected to S via', socketToS.localAddress, socketToS.localPort);
+    console.log(
+      `(${user}->S) connected to S via ${socketToS.localAddress}:${socketToS.localPort}.`);
 
-    // letting local address and port know to S so it can be can be sent to client B:
+    // Letting local address and port know to S so it can be can be sent to client B:
     socketToS.write(JSON.stringify({
-      name: 'A',
+      name: user,
       localAddress: socketToS.localAddress,
       localPort: socketToS.localPort,
     }));
   });
 
   socketToS.on('data', (data) => {
-    console.log('> (A->S) response from S:', data.toString());
-
+    console.log(`(${user}->S) response from S: ${data.toString()}.`);
     const connectionDetails = JSON.parse(data.toString());
-    if (connectionDetails.name === 'A') {
-      // own connection details, only used to display the connection to the
-      // server in console:
-      console.log('');
+    if (connectionDetails.name === user) {
+      // Own connection details, only used to display the connection to the
+      // server in the console.
       console.log(
-        '> (A)', `${socketToS.localAddress}:${socketToS.localPort}`, '===> (NAT of A)',
+        `(${user}) ${socketToS.localAddress}:${socketToS.localPort}`,
+        `===> (NAT of ${user})`,
         `${connectionDetails.remoteAddress}:${connectionDetails.remotePort}`,
-        '===> (S)', `${socketToS.remoteAddress}:${socketToS.remotePort}`);
-      console.log('');
-    }
-
-    if (connectionDetails.name === 'B') {
+        `===> (S) ${socketToS.remoteAddress}:${socketToS.remotePort}\n`);
+    } else {
       console.log(
-        `> (A) time to listen on port used to connect to S (${socketToS.localPort})`);
-      listen(socketToS.localAddress, socketToS.localPort);
+        `(${user}) time to listen on port used to connect to S (${socketToS.localPort})`);
+      setTimeout(listen, RETRY_PERIOD, socketToS.localAddress, socketToS.localPort);
+      socketToS.destroy();
 
-      // try connecting to B directly:
+      // Try connecting to the peer directly.
       connectTo(connectionDetails.remoteAddress, connectionDetails.remotePort);
     }
   });
 
   socketToS.on('end', () => {
-    console.log('> (A->S) connection closed.');
+    console.log(`(${user}->S) connection closed.`);
   });
 
   socketToS.on('error', (err) => {
-    console.log('> (A->S) connection closed with err:', err.code);
+    console.log(`(${user}->S) connection closed with err: ${err.code}.`);
   });
 }
 
 connectToS();
 
-
+// Connect to the discovered peer.
 function connectTo(ip, port) {
   if (tunnelEstablished) return;
 
-  console.log('> (A->B) connecting to B: ===> (B)', `${ip}:${port}`);
+  console.log(`(${user}) connecting: ===> (peer) ${ip}:${port}.`);
   const c = net.createConnection({ host: ip, port }, () => {
-    console.log('> (A->B) Connected to B via', `${ip}:${port}`);
+    console.log(`(${user}) Connected to peer via ${ip}:${port}.`);
     tunnelEstablished = true;
   });
 
   c.on('data', (data) => {
-    console.log('> (A->B) data from B:', data.toString());
+    console.log(`(${user}) data from peer: ${data.toString()}.`);
   });
 
   c.on('end', () => {
-    console.log('> (A->B) connection closed.');
+    console.log(`(${user}) connection closed.`);
   });
 
   c.on('error', (err) => {
-    console.log('> (A->B) connection closed with err:', err.code);
-    setTimeout(() => {
-      connectTo(ip, port);
-    }, 500);
+    console.log(`(${user}) connection closed with peer, err: ${err.code}. Retrying...`);
+    setTimeout(connectTo, RETRY_PERIOD, ip, port);
   });
 }
 
-let tunnelSocket = null;
-
+// Listern on the specified network and port.
 function listen(ip, port) {
   const server = net.createServer((socket) => {
     tunnelSocket = socket;
-
-    console.log('> (A) someone connected, it is:', socket.remoteAddress, socket.remotePort);
-
-    socket.write('Hello there NAT traversal man, you are connected to A!');
+    console.log(
+      `(${user}) someone connected, it is: ${socket.remoteAddress}:${socket.remotePort}.`);
+    socket.write(`Hello there NAT traversal man, you are connected to ${user}!`);
     tunnelEstablished = true;
-
-    readStuffFromCommandLineAndSendToB();
+    readStuffFromCommandLineAndSend();
   });
 
   server.listen(port, ip, (err) => {
     if (err) console.log(err);
-    console.log('> (A) listening on ', `${ip}:${port}`);
+    console.log(`(${user}) listening on ${ip}:${port}.`);
+  }).on('error', (err) => {
+    console.log(`(${user}) listening error ${err.message}.`);
+    setTimeout(listen, RETRY_PERIOD, ip, port);
   });
 }
 
-function readStuffFromCommandLineAndSendToB() {
+function readStuffFromCommandLineAndSend() {
   if (!tunnelSocket) return;
-
-  rl.question('Say something to B:', (stuff) => {
+  rl.question('Say something to peer: ', (stuff) => {
     tunnelSocket.write(stuff);
-    readStuffFromCommandLineAndSendToB();
+    readStuffFromCommandLineAndSend();
   });
 }
