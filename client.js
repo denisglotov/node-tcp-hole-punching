@@ -38,25 +38,9 @@ function connectToS() {
   });
 
   socketToS.on('data', (data) => {
-    console.log(`(${user}->S) response from S: ${data.toString()}.`);
-    const connectionDetails = JSON.parse(data.toString());
-    if (connectionDetails.name === user) {
-      // Own connection details, only used to display the connection to the
-      // server in the console.
-      console.log(
-        `(${user}) ${socketToS.localAddress}:${socketToS.localPort}`,
-        `===> (NAT of ${user})`,
-        `${connectionDetails.remoteAddress}:${connectionDetails.remotePort}`,
-        `===> (S) ${socketToS.remoteAddress}:${socketToS.remotePort}\n`);
-    } else {
-      console.log(
-        `(${user}) time to listen on port used to connect to S (${socketToS.localPort})`);
-      setTimeout(listen, RETRY_PERIOD, socketToS.localAddress, socketToS.localPort);
-      socketToS.destroy();
-
-      // Try connecting to the peer directly.
-      connectTo(connectionDetails.remoteAddress, connectionDetails.remotePort);
-    }
+    console.log(`(${user}->S) response from S: ${data}.`);
+    const dataChunks = data.toString().replace(/}{/g, '},,{').split(',,'); // tcp packets may combine
+    dataChunks.forEach(chunk => chunk && onServerData(chunk));
   });
 
   socketToS.on('end', () => {
@@ -67,8 +51,32 @@ function connectToS() {
     console.log(`(${user}->S) connection closed with err: ${err.code}.`);
   });
 }
-
 connectToS();
+
+// Handle data received from the public server.
+function onServerData(data) {
+  const connectionDetails = JSON.parse(data);
+  if (connectionDetails.name === user) {
+    // Own connection details, only used to display the connection to the
+    // server in the console.
+    console.log(
+      `(${user}) ${socketToS.localAddress}:${socketToS.localPort}`,
+      `===> (NAT of ${user})`,
+      `${connectionDetails.remoteAddress}:${connectionDetails.remotePort}`,
+      `===> (S) ${socketToS.remoteAddress}:${socketToS.remotePort}\n`);
+  } else {
+    console.log(
+      `(${user}) time to listen on port used to connect to S (${socketToS.localPort})`);
+    setTimeout(listen, 0, socketToS.localAddress, socketToS.localPort);
+
+    // For linux you need to destroy socket and wait some time before
+    // listerning on the same port.
+    socketToS.destroy();
+
+    // Try connecting to the peer directly.
+    connectTo(connectionDetails.remoteAddress, connectionDetails.remotePort);
+  }
+}
 
 // Connect to the discovered peer.
 function connectTo(ip, port) {

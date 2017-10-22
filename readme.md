@@ -16,7 +16,7 @@ Improved compared with the [original code][] with the following fixes:
 [original code]: https://github.com/denisglotov/node-tcp-hole-punching
 [minor exceptions]: ./.eslintrc
 [Wikipedia article]: https://en.wikipedia.org/wiki/TCP_hole_punching
-[this article]: // http://www.bford.info/pub/net/p2pnat/index.html
+[this article]: http://www.bford.info/pub/net/p2pnat/index.html
 
 
 How to
