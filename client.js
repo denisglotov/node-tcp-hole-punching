@@ -69,10 +69,6 @@ function onServerData(data) {
       `(${user}) time to listen on port used to connect to S (${socketToS.localPort})`);
     setTimeout(listen, 0, socketToS.localAddress, socketToS.localPort);
 
-    // For linux you need to destroy socket and wait some time before
-    // listerning on the same port.
-    socketToS.destroy();
-
     // Try connecting to the peer directly.
     connectTo(connectionDetails.remoteAddress, connectionDetails.remotePort);
   }

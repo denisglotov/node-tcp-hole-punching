@@ -48,14 +48,17 @@ function onConnect(socket, freeIdx, peerIdx) {
     socket.write(ownData);
 
     // If we have another peer already connected, send this data to him and
-    // his data to this peer.
+    // his data to this peer and then disconnect sockets so the clients can
+    // punch the hole.
     if (peerIdx !== undefined) {
       const peerData = JSON.stringify(slot[peerIdx].data);
       console.log(`[${freeIdx}] sending peer's: ${ownData}.`);
       slot[peerIdx].socket.write(ownData);
+      slot[peerIdx].socket.end();
 
       console.log(`[${freeIdx}] sending peer's: ${peerData}.`);
       slot[freeIdx].socket.write(peerData);
+      slot[freeIdx].socket.end();
     }
 
     console.log('');
